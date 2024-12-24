@@ -190,10 +190,10 @@ client.on('messageCreate', async (message) => {
         message.reply(`Autoplay is now ${isAutoplay ? 'enabled' : 'disabled'}.`);
     }
   // Command to send a message and join a specific voice channel
-    if (command === 'join') {
+   if (command === 'join') {
         const channelName = args[0]; // The name of the channel the bot should join
         const textChannel = message.guild.channels.cache.get(message.channel.id);
-        
+
         // Log the available voice channels for debugging
         console.log('Available voice channels:');
         message.guild.channels.cache.filter(ch => ch.type === 'GUILD_VOICE').forEach(channel => {
@@ -202,7 +202,7 @@ client.on('messageCreate', async (message) => {
 
         // Look for the voice channel
         const voiceChannel = message.guild.channels.cache.find(ch => ch.name === channelName && ch.type === 'GUILD_VOICE');
-        
+
         if (!voiceChannel) {
             return message.reply(`No voice channel named "${channelName}" found! Please make sure the name is correct and try again.`);
         }
@@ -220,6 +220,21 @@ client.on('messageCreate', async (message) => {
 
             console.log(`Bot has joined the voice channel: ${channelName}`);
 
+            // Automatically play the first music file in the Music folder
+            const musicFolderPath = path.join(__dirname, 'Music');
+            const musicFiles = fs.readdirSync(musicFolderPath).filter(file => file.endsWith('.mp3'));
+
+            if (musicFiles.length > 0) {
+                const firstSongPath = path.join(musicFolderPath, musicFiles[0]);
+                musicQueue.push(firstSongPath); // Add the first song to the queue
+                const player = createAudioPlayer();
+                connection.subscribe(player);
+                playNext(connection, player); // Play the first song
+
+                message.reply(`Started playing ${musicFiles[0]} from the Music folder!`);
+            } else {
+                message.reply('No music files found in the Music folder.');
+            }
         } catch (error) {
             console.error('Error joining voice channel:', error);
             message.reply('An error occurred while trying to join the voice channel.');
