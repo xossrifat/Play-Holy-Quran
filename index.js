@@ -161,13 +161,19 @@ client.on('messageCreate', async (message) => {
   // Command to send a message and join a specific voice channel
     if (command === 'join') {
         const channelName = args[0]; // The name of the channel the bot should join
-        const textChannel = message.guild.channels.cache.find(ch => ch.id === message.channel.id);
+        const textChannel = message.guild.channels.cache.get(message.channel.id);
         
+        // Log the available voice channels for debugging
+        console.log('Available voice channels:');
+        message.guild.channels.cache.filter(ch => ch.type === 'GUILD_VOICE').forEach(channel => {
+            console.log(`- ${channel.name}`);
+        });
+
         // Look for the voice channel
         const voiceChannel = message.guild.channels.cache.find(ch => ch.name === channelName && ch.type === 'GUILD_VOICE');
         
         if (!voiceChannel) {
-            return message.reply(`No voice channel named "${channelName}" found!`);
+            return message.reply(`No voice channel named "${channelName}" found! Please make sure the name is correct and try again.`);
         }
 
         // Send a message in the text channel
@@ -189,7 +195,7 @@ client.on('messageCreate', async (message) => {
         }
     }
 
-    // Command to download and play YouTube audio
+ // Command to download and play YouTube audio
     if (command === 'download') {
         const url = args[0];
         if (!ytdl.validateURL(url)) {
@@ -205,8 +211,18 @@ client.on('messageCreate', async (message) => {
         try {
             // Download the video
             const stream = ytdl(url, { filter: 'audioonly' });
-            const writeStream = fs.createWriteStream(tempFilePath);
 
+            stream.on('error', (error) => {
+                if (error.statusCode === 410) {
+                    console.error('Video not available (HTTP 410).');
+                    message.reply('The YouTube video is no longer available (HTTP 410). Please check the URL.');
+                } else {
+                    console.error('Error downloading YouTube audio:', error);
+                    message.reply('An error occurred while downloading the YouTube audio.');
+                }
+            });
+
+            const writeStream = fs.createWriteStream(tempFilePath);
             stream.pipe(writeStream);
 
             writeStream.on('finish', () => {
@@ -257,10 +273,6 @@ client.on('messageCreate', async (message) => {
                 );
             });
 
-            stream.on('error', (error) => {
-                console.error('Error downloading YouTube audio:', error);
-                message.reply('An error occurred while downloading the YouTube audio.');
-            });
         } catch (error) {
             console.error('Error during the download process:', error);
             message.reply('An error occurred while downloading the YouTube audio.');
