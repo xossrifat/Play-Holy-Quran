@@ -26,7 +26,8 @@ const client = new Client({
         GatewayIntentBits.MessageContent,
     ],
 });
-
+// Music queue
+let musicQueue = [];
 client.once('ready', () => {
     console.log(`Logged in as ${client.user.tag}!`);
 });
@@ -93,13 +94,31 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         }
     }
 });
+// Function to play next track in queue
+const playNext = (connection, player) => {
+    if (musicQueue.length > 0) {
+        const filePath = musicQueue.shift(); // Get the next track in the queue
+        const resource = createAudioResource(fs.createReadStream(filePath));
+        player.play(resource);
+
+        player.on('error', (error) => {
+            console.error('Error with player:', error);
+        });
+
+        player.on(AudioPlayerStatus.Idle, () => {
+            playNext(connection, player); // Play the next song in the queue
+        });
+    } else {
+        connection.destroy(); // Disconnect if no songs are left
+    }
+};
 client.on('messageCreate', async (message) => {
     if (!message.content.startsWith('!') || message.author.bot) return;
 
     const args = message.content.slice(1).trim().split(/ +/);
     const command = args.shift().toLowerCase();
 
-    // Command to play a local audio file
+    // Command to play a local audio file from the music folder
     if (command === 'play') {
         const fileName = args[0];
         if (!fileName) {
@@ -123,26 +142,23 @@ client.on('messageCreate', async (message) => {
                 adapterCreator: message.guild.voiceAdapterCreator,
             });
 
-            const resource = createAudioResource(fs.createReadStream(filePath));
-            const player = createAudioPlayer();
+            // Add the song to the queue
+            musicQueue.push(filePath);
+            if (musicQueue.length === 1) {
+                // If this is the first song in the queue, start playing
+                const player = createAudioPlayer();
+                connection.subscribe(player);
+                playNext(connection, player);
+            }
 
-            connection.subscribe(player);
-            player.play(resource);
-
-            player.on('error', (error) => {
-                console.error('Error with player:', error);
-                message.reply('An error occurred while trying to play the audio.');
-            });
-
-            console.log('Local audio is playing in the voice channel!');
-            message.reply(`Now playing: ${fileName}`);
+            message.reply(`Added ${fileName} to the queue.`);
         } catch (error) {
             console.error('Error while playing local audio:', error);
             message.reply('An error occurred while trying to play the audio.');
         }
     }
 
-    // Command to download a YouTube video as an MP3 file
+        // Command to download a YouTube video as an MP3 file
     if (command === 'download') {
         const url = args[0];
         if (!ytdl.validateURL(url)) {
@@ -182,6 +198,24 @@ client.on('messageCreate', async (message) => {
                         });
 
                         message.reply(`Download complete! File saved as: ${videoID}.mp3`);
+
+                        // Add the downloaded song to the queue
+                        if (message.member.voice.channel) {
+                            const filePath = outputPath;
+                            musicQueue.push(filePath);
+                            if (musicQueue.length === 1) {
+                                // If this is the first song in the queue, start playing
+                                const connection = joinVoiceChannel({
+                                    channelId: message.member.voice.channel.id,
+                                    guildId: message.guild.id,
+                                    adapterCreator: message.guild.voiceAdapterCreator,
+                                });
+
+                                const player = createAudioPlayer();
+                                connection.subscribe(player);
+                                playNext(connection, player);
+                            }
+                        }
                     }
                 );
             });
