@@ -26,8 +26,6 @@ const client = new Client({
         GatewayIntentBits.MessageContent,
     ],
 });
-// Music queue
-let musicQueue = [];
 client.once('ready', () => {
     console.log(`Logged in as ${client.user.tag}!`);
 });
@@ -94,10 +92,24 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         }
     }
 });
-// Function to play next track in queue
+let musicQueue = [];
+let isShuffleMode = false; // Shuffle mode flag
+let isAutoplay = false; // Autoplay mode flag
+// Function to shuffle the queue
+const shuffleQueue = () => {
+    for (let i = musicQueue.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [musicQueue[i], musicQueue[j]] = [musicQueue[j], musicQueue[i]];
+    }
+};
+// Function to play the next track in the queue
 const playNext = (connection, player) => {
     if (musicQueue.length > 0) {
-        const filePath = musicQueue.shift(); // Get the next track in the queue
+        // If shuffle mode is enabled, pick a random song from the queue
+        const filePath = isShuffleMode
+            ? musicQueue.splice(Math.floor(Math.random() * musicQueue.length), 1)[0]
+            : musicQueue.shift();
+
         const resource = createAudioResource(fs.createReadStream(filePath));
         player.play(resource);
 
@@ -106,10 +118,19 @@ const playNext = (connection, player) => {
         });
 
         player.on(AudioPlayerStatus.Idle, () => {
-            playNext(connection, player); // Play the next song in the queue
+            if (musicQueue.length > 0 || isAutoplay) {
+                playNext(connection, player);
+            } else {
+                connection.destroy(); // Disconnect if no songs are left and autoplay is disabled
+            }
         });
+    } else if (isAutoplay) {
+        // Logic for autoplay (e.g., play related songs from a predefined list or YouTube suggestions)
+        // You can extend this to fetch related tracks dynamically
+        console.log('Autoplay is enabled, but no implementation yet.');
+        connection.destroy(); // Remove this line when implementing autoplay logic
     } else {
-        connection.destroy(); // Disconnect if no songs are left
+        connection.destroy(); // Disconnect if no songs are left and autoplay is disabled
     }
 };
 client.on('messageCreate', async (message) => {
@@ -157,7 +178,17 @@ client.on('messageCreate', async (message) => {
             message.reply('An error occurred while trying to play the audio.');
         }
     }
+// Command to toggle shuffle mode
+    if (command === 'shuffle') {
+        isShuffleMode = !isShuffleMode;
+        message.reply(`Shuffle mode is now ${isShuffleMode ? 'enabled' : 'disabled'}.`);
+    }
 
+    // Command to toggle autoplay mode
+    if (command === 'autoplay') {
+        isAutoplay = !isAutoplay;
+        message.reply(`Autoplay is now ${isAutoplay ? 'enabled' : 'disabled'}.`);
+    }
   // Command to send a message and join a specific voice channel
     if (command === 'join') {
         const channelName = args[0]; // The name of the channel the bot should join
