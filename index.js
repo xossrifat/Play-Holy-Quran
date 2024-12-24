@@ -31,67 +31,39 @@ client.once('ready', () => {
 });
 // Listen for voice state updates (when users join/leave channels)
 client.on('voiceStateUpdate', async (oldState, newState) => {
-    const user = newState.member.user.username;
-
-    // Check if a user has joined a voice channel
     if (!oldState.channelId && newState.channelId) {
-        const channelName = newState.channel.name;
         const guild = newState.guild;
+        const user = newState.member.user.username;
+        const channel = newState.channel;
 
-        // Send a message in the default text channel
-        const textChannel = guild.channels.cache.find(
-            (ch) => ch.type === 0 && ch.permissionsFor(guild.members.me).has('SendMessages')
-        );
+        console.log(`${user} joined ${channel.name}.`);
 
-        if (textChannel) {
-            textChannel.send(`🎉 **${user}** has joined the voice channel **${channelName}**!`);
-        }
-
-        // Announce in the voice channel
         try {
             const connection = joinVoiceChannel({
-                channelId: newState.channel.id,
+                channelId: channel.id,
                 guildId: guild.id,
                 adapterCreator: guild.voiceAdapterCreator,
             });
 
-            // Use gtts library for text-to-speech generation
-            const ttsFilePath = `./welcome-${user}.mp3`;
-            exec(
-                `python3 -m gtts "Welcome ${user} to the voice channel ${channelName}" --output "${ttsFilePath}"`,
-                (err) => {
-                    if (err) {
-                        console.error('Error generating TTS file:', err);
-                        return;
-                    }
+            const musicFolderPath = path.join(__dirname, 'Music');
+            const musicFiles = fs.readdirSync(musicFolderPath).filter(file => file.endsWith('.mp3'));
 
-                    console.log('TTS file generated successfully.');
+            if (musicFiles.length > 0) {
+                console.log('Adding music to the queue...');
+                musicQueue.push(...musicFiles.map(file => path.join(musicFolderPath, file)));
 
-                    // Play the TTS announcement
-                    const resource = createAudioResource(fs.createReadStream(ttsFilePath));
-                    const player = createAudioPlayer();
-                    connection.subscribe(player);
-                    player.play(resource);
-
-                    // Cleanup after playing
-                    player.on('idle', () => {
-                        fs.unlink(ttsFilePath, (err) => {
-                            if (err) console.error('Failed to delete TTS file:', err);
-                        });
-                        connection.destroy();
-                    });
-
-                    player.on('error', (error) => {
-                        console.error('Error with player:', error);
-                        connection.destroy();
-                    });
-                }
-            );
+                const player = createAudioPlayer();
+                connection.subscribe(player);
+                playNext(connection, player); // Start playing
+            } else {
+                console.log('No music files found in the Music folder.');
+            }
         } catch (error) {
-            console.error('Error joining voice channel or announcing:', error);
+            console.error('Error joining the voice channel:', error);
         }
     }
 });
+
 let musicQueue = [];
 let isShuffleMode = false; // Shuffle mode flag
 let isAutoplay = false; // Autoplay mode flag
@@ -105,7 +77,7 @@ const shuffleQueue = () => {
 // Function to play the next track in the queue
 const playNext = (connection, player) => {
     if (musicQueue.length > 0) {
-        // If shuffle mode is enabled, pick a random song from the queue
+        // Shuffle or take the next song
         const filePath = isShuffleMode
             ? musicQueue.splice(Math.floor(Math.random() * musicQueue.length), 1)[0]
             : musicQueue.shift();
@@ -113,24 +85,28 @@ const playNext = (connection, player) => {
         const resource = createAudioResource(fs.createReadStream(filePath));
         player.play(resource);
 
+        console.log(`Now playing: ${path.basename(filePath)}`);
+
         player.on('error', (error) => {
-            console.error('Error with player:', error);
+            console.error('Error with the audio player:', error);
+            playNext(connection, player); // Skip to the next song on error
         });
 
         player.on(AudioPlayerStatus.Idle, () => {
+            console.log('Track finished, moving to the next track.');
             if (musicQueue.length > 0 || isAutoplay) {
-                playNext(connection, player);
+                playNext(connection, player); // Play the next track
             } else {
+                console.log('Queue is empty. Disconnecting.');
                 connection.destroy(); // Disconnect if no songs are left and autoplay is disabled
             }
         });
     } else if (isAutoplay) {
-        // Logic for autoplay (e.g., play related songs from a predefined list or YouTube suggestions)
-        // You can extend this to fetch related tracks dynamically
-        console.log('Autoplay is enabled, but no implementation yet.');
-        connection.destroy(); // Remove this line when implementing autoplay logic
+        console.log('Autoplay enabled but no logic implemented.');
+        // Add your autoplay logic here (e.g., fetch related tracks from YouTube)
     } else {
-        connection.destroy(); // Disconnect if no songs are left and autoplay is disabled
+        console.log('Queue is empty. Disconnecting.');
+        connection.destroy(); // Disconnect if no songs are left
     }
 };
 client.on('messageCreate', async (message) => {
