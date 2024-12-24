@@ -158,7 +158,38 @@ client.on('messageCreate', async (message) => {
         }
     }
 
-        // Command to download a YouTube video as an MP3 file
+  // Command to send a message and join a specific voice channel
+    if (command === 'join') {
+        const channelName = args[0]; // The name of the channel the bot should join
+        const textChannel = message.guild.channels.cache.find(ch => ch.id === message.channel.id);
+        
+        // Look for the voice channel
+        const voiceChannel = message.guild.channels.cache.find(ch => ch.name === channelName && ch.type === 'GUILD_VOICE');
+        
+        if (!voiceChannel) {
+            return message.reply(`No voice channel named "${channelName}" found!`);
+        }
+
+        // Send a message in the text channel
+        message.reply(`I'm going to join the voice channel: ${channelName}!`);
+
+        try {
+            // Join the voice channel
+            const connection = joinVoiceChannel({
+                channelId: voiceChannel.id,
+                guildId: message.guild.id,
+                adapterCreator: message.guild.voiceAdapterCreator,
+            });
+
+            console.log(`Bot has joined the voice channel: ${channelName}`);
+
+        } catch (error) {
+            console.error('Error joining voice channel:', error);
+            message.reply('An error occurred while trying to join the voice channel.');
+        }
+    }
+
+    // Command to download and play YouTube audio
     if (command === 'download') {
         const url = args[0];
         if (!ytdl.validateURL(url)) {
@@ -199,22 +230,28 @@ client.on('messageCreate', async (message) => {
 
                         message.reply(`Download complete! File saved as: ${videoID}.mp3`);
 
-                        // Add the downloaded song to the queue
+                        // Add the downloaded song to the queue and play it
                         if (message.member.voice.channel) {
                             const filePath = outputPath;
-                            musicQueue.push(filePath);
-                            if (musicQueue.length === 1) {
-                                // If this is the first song in the queue, start playing
-                                const connection = joinVoiceChannel({
-                                    channelId: message.member.voice.channel.id,
-                                    guildId: message.guild.id,
-                                    adapterCreator: message.guild.voiceAdapterCreator,
-                                });
+                            const connection = joinVoiceChannel({
+                                channelId: message.member.voice.channel.id,
+                                guildId: message.guild.id,
+                                adapterCreator: message.guild.voiceAdapterCreator,
+                            });
 
-                                const player = createAudioPlayer();
-                                connection.subscribe(player);
-                                playNext(connection, player);
-                            }
+                            const resource = createAudioResource(fs.createReadStream(filePath));
+                            const player = createAudioPlayer();
+
+                            connection.subscribe(player);
+                            player.play(resource);
+
+                            player.on('error', (error) => {
+                                console.error('Error with player:', error);
+                                message.reply('An error occurred while trying to play the audio.');
+                            });
+
+                            console.log('Audio is playing in the voice channel!');
+                            message.reply(`Now playing: ${videoID}.mp3`);
                         }
                     }
                 );
