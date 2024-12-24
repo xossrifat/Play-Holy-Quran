@@ -30,7 +30,69 @@ const client = new Client({
 client.once('ready', () => {
     console.log(`Logged in as ${client.user.tag}!`);
 });
+// Listen for voice state updates (when users join/leave channels)
+client.on('voiceStateUpdate', async (oldState, newState) => {
+    const user = newState.member.user.username;
 
+    // Check if a user has joined a voice channel
+    if (!oldState.channelId && newState.channelId) {
+        const channelName = newState.channel.name;
+        const guild = newState.guild;
+
+        // Send a message in the default text channel
+        const textChannel = guild.channels.cache.find(
+            (ch) => ch.type === 0 && ch.permissionsFor(guild.members.me).has('SendMessages')
+        );
+
+        if (textChannel) {
+            textChannel.send(`🎉 **${user}** has joined the voice channel **${channelName}**!`);
+        }
+
+        // Announce in the voice channel
+        try {
+            const connection = joinVoiceChannel({
+                channelId: newState.channel.id,
+                guildId: guild.id,
+                adapterCreator: guild.voiceAdapterCreator,
+            });
+
+            // Generate a TTS announcement
+            const ttsFilePath = `./welcome-${user}.mp3`;
+            exec(
+                `gtts-cli "Welcome ${user} to the voice channel ${channelName}" --output "${ttsFilePath}"`,
+                (err) => {
+                    if (err) {
+                        console.error('Error generating TTS file:', err);
+                        return;
+                    }
+
+                    console.log('TTS file generated successfully.');
+
+                    // Play the TTS announcement
+                    const resource = createAudioResource(fs.createReadStream(ttsFilePath));
+                    const player = createAudioPlayer();
+                    connection.subscribe(player);
+                    player.play(resource);
+
+                    // Cleanup after playing
+                    player.on('idle', () => {
+                        fs.unlink(ttsFilePath, (err) => {
+                            if (err) console.error('Failed to delete TTS file:', err);
+                        });
+                        connection.destroy();
+                    });
+
+                    player.on('error', (error) => {
+                        console.error('Error with player:', error);
+                        connection.destroy();
+                    });
+                }
+            );
+        } catch (error) {
+            console.error('Error joining voice channel or announcing:', error);
+        }
+    }
+});
 client.on('messageCreate', async (message) => {
     if (!message.content.startsWith('!') || message.author.bot) return;
 
