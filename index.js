@@ -163,16 +163,20 @@ client.on('messageCreate', async (message) => {
                 adapterCreator: message.guild.voiceAdapterCreator,
             });
 
-            // Add the song to the queue
-            musicQueue.push(filePath);
-            if (musicQueue.length === 1) {
-                // If this is the first song in the queue, start playing
+            const musicFolderPath = path.join(__dirname, 'Music');
+            const musicFiles = fs.readdirSync(musicFolderPath).filter(file => file.endsWith('.mp3'));
+
+            if (musicFiles.length > 0) {
+                const firstSongPath = path.join(musicFolderPath, musicFiles[0]);
+                musicQueue.push(firstSongPath); // Add the first song to the queue
                 const player = createAudioPlayer();
                 connection.subscribe(player);
-                playNext(connection, player);
-            }
+                playNext(connection, player); // Play the first song
 
-            message.reply(`Added ${fileName} to the queue.`);
+                message.reply(`Started playing ${musicFiles[0]} from the Music folder!`);
+            } else {
+                message.reply('No music files found in the Music folder.');
+            }
         } catch (error) {
             console.error('Error while playing local audio:', error);
             message.reply('An error occurred while trying to play the audio.');
