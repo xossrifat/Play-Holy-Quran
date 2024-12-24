@@ -125,7 +125,7 @@ client.on('messageCreate', async (message) => {
             return message.reply('Please provide the name of the audio file to play.');
         }
 
-        const filePath = path.join(__dirname, 'music', fileName);
+        const filePath = path.join(__dirname, 'Music', fileName);
 
         if (!fs.existsSync(filePath)) {
             return message.reply('The specified file does not exist in the music folder.');
