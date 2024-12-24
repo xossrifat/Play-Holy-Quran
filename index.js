@@ -10,13 +10,6 @@ const path = require('path');
 const { exec } = require('child_process');
 const ytdl = require('ytdl-core');
 require('dotenv').config();
-const express = require('express');
-const app = express();
-
-app.get('/', (req, res) => res.send('Bot is running!'));
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
 
 const client = new Client({
     intents: [
@@ -26,74 +19,14 @@ const client = new Client({
         GatewayIntentBits.MessageContent,
     ],
 });
+
 // Music queue
 let musicQueue = [];
+
 client.once('ready', () => {
     console.log(`Logged in as ${client.user.tag}!`);
 });
-// Listen for voice state updates (when users join/leave channels)
-client.on('voiceStateUpdate', async (oldState, newState) => {
-    const user = newState.member.user.username;
 
-    // Check if a user has joined a voice channel
-    if (!oldState.channelId && newState.channelId) {
-        const channelName = newState.channel.name;
-        const guild = newState.guild;
-
-        // Send a message in the default text channel
-        const textChannel = guild.channels.cache.find(
-            (ch) => ch.type === 0 && ch.permissionsFor(guild.members.me).has('SendMessages')
-        );
-
-        if (textChannel) {
-            textChannel.send(`🎉 **${user}** has joined the voice channel **${channelName}**!`);
-        }
-
-        // Announce in the voice channel
-        try {
-            const connection = joinVoiceChannel({
-                channelId: newState.channel.id,
-                guildId: guild.id,
-                adapterCreator: guild.voiceAdapterCreator,
-            });
-
-            // Use gtts library for text-to-speech generation
-            const ttsFilePath = `./welcome-${user}.mp3`;
-            exec(
-                `python3 -m gtts "Welcome ${user} to the voice channel ${channelName}" --output "${ttsFilePath}"`,
-                (err) => {
-                    if (err) {
-                        console.error('Error generating TTS file:', err);
-                        return;
-                    }
-
-                    console.log('TTS file generated successfully.');
-
-                    // Play the TTS announcement
-                    const resource = createAudioResource(fs.createReadStream(ttsFilePath));
-                    const player = createAudioPlayer();
-                    connection.subscribe(player);
-                    player.play(resource);
-
-                    // Cleanup after playing
-                    player.on('idle', () => {
-                        fs.unlink(ttsFilePath, (err) => {
-                            if (err) console.error('Failed to delete TTS file:', err);
-                        });
-                        connection.destroy();
-                    });
-
-                    player.on('error', (error) => {
-                        console.error('Error with player:', error);
-                        connection.destroy();
-                    });
-                }
-            );
-        } catch (error) {
-            console.error('Error joining voice channel or announcing:', error);
-        }
-    }
-});
 // Function to play next track in queue
 const playNext = (connection, player) => {
     if (musicQueue.length > 0) {
@@ -112,6 +45,7 @@ const playNext = (connection, player) => {
         connection.destroy(); // Disconnect if no songs are left
     }
 };
+
 client.on('messageCreate', async (message) => {
     if (!message.content.startsWith('!') || message.author.bot) return;
 
@@ -158,7 +92,7 @@ client.on('messageCreate', async (message) => {
         }
     }
 
-        // Command to download a YouTube video as an MP3 file
+    // Command to download a YouTube video as an MP3 file
     if (command === 'download') {
         const url = args[0];
         if (!ytdl.validateURL(url)) {
@@ -227,6 +161,48 @@ client.on('messageCreate', async (message) => {
         } catch (error) {
             console.error('Error during the download process:', error);
             message.reply('An error occurred while downloading the YouTube audio.');
+        }
+    }
+
+    // Command to announce when someone joins the channel
+    if (command === 'announcejoin') {
+        const channelName = args[0];
+        if (!message.guild) return;
+        const channel = message.guild.channels.cache.find(ch => ch.name === channelName && ch.isVoice());
+
+        if (channel) {
+            // Play TTS when someone joins
+            client.on('voiceStateUpdate', (oldState, newState) => {
+                if (!oldState.channel && newState.channel && newState.channel.id === channel.id) {
+                    const username = newState.member.user.username;
+                    const message = `Welcome ${username} to the voice channel ${channelName}`;
+                    const outputFilePath = `./welcome-${username}.mp3`;
+
+                    exec(`python3 -m gtts "${message}" --output "${outputFilePath}"`, (err, stdout, stderr) => {
+                        if (err) {
+                            console.error('Error generating TTS file:', err);
+                            return;
+                        }
+
+                        console.log('TTS generated successfully.');
+                        // Play the generated TTS file after the music finishes playing
+                        musicQueue.push(outputFilePath);
+                        if (musicQueue.length === 1) {
+                            const connection = joinVoiceChannel({
+                                channelId: newState.channel.id,
+                                guildId: newState.guild.id,
+                                adapterCreator: newState.guild.voiceAdapterCreator,
+                            });
+
+                            const player = createAudioPlayer();
+                            connection.subscribe(player);
+                            playNext(connection, player);
+                        }
+                    });
+                }
+            });
+        } else {
+            message.reply('The specified voice channel does not exist.');
         }
     }
 });
