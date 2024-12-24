@@ -56,10 +56,10 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
                 adapterCreator: guild.voiceAdapterCreator,
             });
 
-            // Generate a TTS announcement
+            // Use gtts library for text-to-speech generation
             const ttsFilePath = `./welcome-${user}.mp3`;
             exec(
-                `gtts-cli "Welcome ${user} to the voice channel ${channelName}" --output "${ttsFilePath}"`,
+                `python3 -m gtts "Welcome ${user} to the voice channel ${channelName}" --output "${ttsFilePath}"`,
                 (err) => {
                     if (err) {
                         console.error('Error generating TTS file:', err);
