@@ -30,39 +30,7 @@ client.once('ready', () => {
     console.log(`Logged in as ${client.user.tag}!`);
 });
 // Listen for voice state updates (when users join/leave channels)
-client.on('voiceStateUpdate', async (oldState, newState) => {
-    if (!oldState.channelId && newState.channelId) {
-        const guild = newState.guild;
-        const user = newState.member.user.username;
-        const channel = newState.channel;
 
-        console.log(`${user} joined ${channel.name}.`);
-
-        try {
-            const connection = joinVoiceChannel({
-                channelId: channel.id,
-                guildId: guild.id,
-                adapterCreator: guild.voiceAdapterCreator,
-            });
-
-            const musicFolderPath = path.join(__dirname, 'Music');
-            const musicFiles = fs.readdirSync(musicFolderPath).filter(file => file.endsWith('.mp3'));
-
-            if (musicFiles.length > 0) {
-                console.log('Adding music to the queue...');
-                musicQueue.push(...musicFiles.map(file => path.join(musicFolderPath, file)));
-
-                const player = createAudioPlayer();
-                connection.subscribe(player);
-                playNext(connection, player); // Start playing
-            } else {
-                console.log('No music files found in the Music folder.');
-            }
-        } catch (error) {
-            console.error('Error joining the voice channel:', error);
-        }
-    }
-});
 
 let musicQueue = [];
 let isShuffleMode = false; // Shuffle mode flag
@@ -75,9 +43,10 @@ const shuffleQueue = () => {
     }
 };
 // Function to play the next track in the queue
+const activeConnections = new Map(); // Track active connections
+
 const playNext = (connection, player) => {
     if (musicQueue.length > 0) {
-        // Shuffle or take the next song
         const filePath = isShuffleMode
             ? musicQueue.splice(Math.floor(Math.random() * musicQueue.length), 1)[0]
             : musicQueue.shift();
@@ -93,22 +62,53 @@ const playNext = (connection, player) => {
         });
 
         player.on(AudioPlayerStatus.Idle, () => {
-            console.log('Track finished, moving to the next track.');
             if (musicQueue.length > 0 || isAutoplay) {
                 playNext(connection, player); // Play the next track
             } else {
-                console.log('Queue is empty. Disconnecting.');
-                connection.destroy(); // Disconnect if no songs are left and autoplay is disabled
+                console.log('Queue is empty.');
             }
         });
     } else if (isAutoplay) {
-        console.log('Autoplay enabled but no logic implemented.');
-        // Add your autoplay logic here (e.g., fetch related tracks from YouTube)
+        console.log('Autoplay is enabled but no implementation yet.');
     } else {
-        console.log('Queue is empty. Disconnecting.');
-        connection.destroy(); // Disconnect if no songs are left
+        console.log('Queue is empty.');
     }
 };
+
+client.on('voiceStateUpdate', async (oldState, newState) => {
+    if (!oldState.channelId && newState.channelId) {
+        const guild = newState.guild;
+        const channel = newState.channel;
+
+        console.log(`User joined ${channel.name}.`);
+
+        if (!activeConnections.has(guild.id)) {
+            try {
+                const connection = joinVoiceChannel({
+                    channelId: channel.id,
+                    guildId: guild.id,
+                    adapterCreator: guild.voiceAdapterCreator,
+                });
+
+                const player = createAudioPlayer();
+                connection.subscribe(player);
+                activeConnections.set(guild.id, { connection, player });
+
+                if (musicQueue.length === 0) {
+                    const musicFolderPath = path.join(__dirname, 'Music');
+                    const musicFiles = fs.readdirSync(musicFolderPath).filter(file => file.endsWith('.mp3'));
+                    if (musicFiles.length > 0) {
+                        musicQueue.push(...musicFiles.map(file => path.join(musicFolderPath, file)));
+                    }
+                }
+
+                playNext(connection, player);
+            } catch (error) {
+                console.error('Error joining the voice channel:', error);
+            }
+        }
+    }
+});
 client.on('messageCreate', async (message) => {
     if (!message.content.startsWith('!') || message.author.bot) return;
 
