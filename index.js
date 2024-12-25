@@ -8,12 +8,6 @@ const {
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
-const app = express();
-
-app.get('/', (req, res) => res.send('Bot is running!'));
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
 
 const client = new Client({
     intents: [
