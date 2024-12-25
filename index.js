@@ -1,15 +1,10 @@
-const { VoiceConnectionStatus, entersState } = require('@discordjs/voice');
-const {
-    joinVoiceChannel,
-    createAudioPlayer,
-    createAudioResource,
-    AudioPlayerStatus,
-    NoSubscriberBehavior,
-} = require('@discordjs/voice');
+const { Client, GatewayIntentBits } = require('discord.js');
+const { VoiceConnectionStatus, entersState, createAudioPlayer, createAudioResource, AudioPlayerStatus, NoSubscriberBehavior, joinVoiceChannel } = require('@discordjs/voice');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
+// Initialize the client with necessary intents
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -24,12 +19,13 @@ let currentPlayer = null;
 let currentConnection = null;
 let isPaused = false;
 
-// Helper function to load music files
+// Helper function to load music files from the music folder
 const loadMusicQueue = () => {
     const musicFolderPath = path.join(__dirname, 'Music');
     const musicFiles = fs.readdirSync(musicFolderPath).filter(file => file.endsWith('.mp3'));
     return musicFiles.map(file => path.join(musicFolderPath, file));
 };
+
 // Function to play the next song in the queue
 const playNext = () => {
     if (!currentConnection || musicQueue.length === 0) return;
@@ -38,11 +34,13 @@ const playNext = () => {
     const resource = createAudioResource(fs.createReadStream(filePath));
 
     currentPlayer.play(resource);
+
     currentPlayer.on(AudioPlayerStatus.Idle, () => {
         if (musicQueue.length > 0) {
             playNext();
         } else {
             console.log('Queue is empty, stopping playback.');
+            currentConnection.destroy();  // Disconnect from the channel when queue is empty
         }
     });
 
@@ -53,13 +51,14 @@ const playNext = () => {
     console.log(`Now playing: ${path.basename(filePath)}`);
 };
 
-// Command handler
+// Command handler for bot commands
 client.on('messageCreate', async (message) => {
     if (!message.content.startsWith('!') || message.author.bot) return;
 
     const args = message.content.slice(1).trim().split(/ +/);
     const command = args.shift().toLowerCase();
 
+    // Play specific song or resume if no song is specified
     if (command === 'play') {
         const fileName = args.join(' '); // Get the file name or specific song
         const musicFolderPath = path.join(__dirname, 'Music');
@@ -70,7 +69,6 @@ client.on('messageCreate', async (message) => {
             if (currentPlayer && currentConnection) {
                 playNext();
             } else {
-                // Connect to the voice channel and play
                 const channelId = process.env.VOICE_CHANNEL_ID;
                 const guildId = process.env.GUILD_ID;
                 const guild = client.guilds.cache.get(guildId);
@@ -103,6 +101,7 @@ client.on('messageCreate', async (message) => {
         }
     }
 
+    // Pause playback
     if (command === 'pause') {
         if (!currentPlayer || isPaused) {
             return message.reply('No music is currently playing or it is already paused.');
@@ -112,6 +111,7 @@ client.on('messageCreate', async (message) => {
         message.reply('Playback paused.');
     }
 
+    // Resume playback
     if (command === 'resume') {
         if (!currentPlayer || !isPaused) {
             return message.reply('No music is currently paused.');
@@ -121,6 +121,7 @@ client.on('messageCreate', async (message) => {
         message.reply('Playback resumed.');
     }
 
+    // Skip to next song
     if (command === 'next') {
         if (musicQueue.length === 0) {
             return message.reply('The queue is empty. Add more songs to play next.');
@@ -141,6 +142,7 @@ client.once('ready', async () => {
         return;
     }
 
+    // Join the voice channel and start playing music
     currentConnection = joinVoiceChannel({
         channelId,
         guildId,
