@@ -30,23 +30,6 @@ const loadMusicQueue = () => {
     const musicFiles = fs.readdirSync(musicFolderPath).filter(file => file.endsWith('.mp3'));
     return musicFiles.map(file => path.join(musicFolderPath, file));
 };
-async function connectToChannel(channel) {
-    const connection = joinVoiceChannel({
-        channelId: channel.id,
-        guildId: channel.guild.id,
-        adapterCreator: channel.guild.voiceAdapterCreator,
-    });
-
-    try {
-        await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
-        console.log('Connected to the voice channel!');
-        return connection;
-    } catch (error) {
-        connection.destroy();
-        console.error('Failed to connect to the voice channel:', error);
-        throw error;
-    }
-}
 // Function to play the next song in the queue
 const playNext = () => {
     if (!currentConnection || musicQueue.length === 0) return;
