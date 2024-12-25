@@ -3,19 +3,7 @@ const { VoiceConnectionStatus, entersState, createAudioPlayer, createAudioResour
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
-const express = require('express');
-const app = express();
 require('./keep-alive');
-
-// Simple endpoint to keep the bot alive
-app.get('/', (req, res) => {
-    res.send('Bot is running!');
-});
-
-// Start the HTTP server
-app.listen(3000, () => {
-    console.log('HTTP server running on port 3000');
-});
 
 // Initialize the client with necessary intents
 const client = new Client({
