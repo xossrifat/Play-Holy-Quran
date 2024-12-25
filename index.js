@@ -5,6 +5,7 @@ const path = require('path');
 require('dotenv').config();
 const express = require('express');
 const app = express();
+require('./keep-alive');
 
 // Simple endpoint to keep the bot alive
 app.get('/', (req, res) => {
